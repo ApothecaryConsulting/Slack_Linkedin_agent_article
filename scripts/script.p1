@@ -1,5 +1,8 @@
 # Start n8n
 docker compose up -d
 
-# Start ngrok (assumes ngrok is installed and on PATH)
-ngrok http 5678
+# Start ngrok if enabled in config.json
+$config = Get-Content -Path "$PSScriptRoot/../config.json" | ConvertFrom-Json
+if ($config.ngrok.enabled) {
+    ngrok http 5678
+}
