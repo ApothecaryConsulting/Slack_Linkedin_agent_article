@@ -346,7 +346,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first().json;\n\nconst formattedHashtags = (item.draft_hashtags || '')\n  .split(/\\s+/)\n  .filter(Boolean)\n  .map(t => t.startsWith('#') ? t : `#${t}`)\n  .join(' ');\n\nconst final_text = item.post_text  + formattedHashtags;\n\nreturn {\n  json: {\n    ...item,\n    final_text: final_text,\n    final_hashtags: formattedHashtags\n  }\n};"
+        "jsCode": "const item = $input.first().json;\nconst formattedHashtags = (item.draft_hashtags || '')\n  .split(/\\s+/)\n  .filter(Boolean)\n  .map(t => t.startsWith('#') ? t : `#${t}`)\n  .join(' ');\n\nconst postLink = item.post_link ? `\\n${item.post_link}` : '';\nconst final_text = item.post_text + postLink + formattedHashtags;\n\nreturn {\n  json: {\n    ...item,\n    final_text: final_text,\n    final_hashtags: formattedHashtags\n  }\n};"
       },
       "id": "186abd2d-8428-4cb0-a5b8-6c4ef820bfd6",
       "name": "Build Final LinkedIn Text",
@@ -356,45 +356,6 @@
         2896,
         656
       ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.linkedin.com/v2/ugcPosts",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "linkedInOAuth2Api",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Restli-Protocol-Version",
-              "value": "2.0.0"
-            },
-            {
-              "name": "=Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"author\": \"urn:li:person:0ktuyxZ1g0\",\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": \"{{$json.final_text}}\"\n      },\n      \"shareMediaCategory\": \"NONE\"\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
-        "options": {}
-      },
-      "id": "10540d82-8e06-4d75-b465-8670b99461f3",
-      "name": "LinkedIn Post",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3136,
-        528
-      ],
-      "credentials": {
-        "linkedInOAuth2Api": {
-          "id": "Wmz5GOA0gUeZgqY5",
-          "name": "LinkedIn account"
-        }
-      }
     },
     {
       "parameters": {
@@ -665,7 +626,7 @@
       "typeVersion": 3.4,
       "position": [
         3104,
-        896
+        912
       ],
       "id": "c0f53a0b-14d2-4d90-be19-1fe1244e3a2d",
       "name": "Config / Constants1"
@@ -699,6 +660,27 @@
       ],
       "id": "c573e716-ef0d-4053-b16b-4a44ec02da92",
       "name": "Config / Constants2"
+    },
+    {
+      "parameters": {
+        "person": "7MBBZ4Rbor",
+        "text": "={{$json.final_text}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "position": [
+        3104,
+        656
+      ],
+      "id": "86571c9d-d9ea-4e7e-bb75-31c58e8054e3",
+      "name": "Create a post",
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "HHKrfv4Oqo0pv7UX",
+          "name": "LinkedIn account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -812,18 +794,7 @@
       "main": [
         [
           {
-            "node": "LinkedIn Post",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "LinkedIn Post": {
-      "main": [
-        [
-          {
-            "node": "Config / Constants1",
+            "node": "Create a post",
             "type": "main",
             "index": 0
           }
@@ -949,6 +920,17 @@
           }
         ]
       ]
+    },
+    "Create a post": {
+      "main": [
+        [
+          {
+            "node": "Config / Constants1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -957,7 +939,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "b91c6a47-0ca0-4b15-9522-10e3842f72f3",
+  "versionId": "c76da2fd-9910-4153-840a-e1e7d7020e3c",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "8104b931df9cff9d75c598c48a922ad3894b2002442349bf0b526e50abda9811"
