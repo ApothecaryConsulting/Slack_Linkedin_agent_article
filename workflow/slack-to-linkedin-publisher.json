@@ -346,7 +346,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst formattedHashtags = (item.draft_hashtags || '')\n  .split(/\\s+/)\n  .filter(Boolean)\n  .map(t => t.startsWith('#') ? t : `#${t}`)\n  .join(' ');\n\nconst postLink = item.post_link ? `\\n${item.post_link}` : '';\nconst final_text = item.post_text + postLink + formattedHashtags;\n\nreturn {\n  json: {\n    ...item,\n    final_text: final_text,\n    final_hashtags: formattedHashtags\n  }\n};"
+        "jsCode": "const item = $input.first().json;\nconst formattedHashtags = (item.draft_hashtags || '')\n  .split(/\\s+/)\n  .filter(Boolean)\n  .map(t => t.startsWith('#') ? t : `#${t}`)\n  .join(' ');\n\nconst postLink = item.post_link ? `\\n\\n${item.post_link}` : '';\nconst hashtagSection = formattedHashtags ? `\\n\\n${formattedHashtags}` : '';\nconst final_text = item.post_text + postLink + hashtagSection;\n\nreturn {\n  json: {\n    ...item,\n    final_text: final_text,\n    final_hashtags: formattedHashtags\n  }\n};"
       },
       "id": "186abd2d-8428-4cb0-a5b8-6c4ef820bfd6",
       "name": "Build Final LinkedIn Text",
