@@ -687,6 +687,28 @@
           "name": "LinkedIn account"
         }
       }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.post_link }}",
+        "options": {
+          "timeout": 10000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          }
+        }
+      },
+      "id": "3175eaa4-927e-4aa3-9baf-688c5b626f80",
+      "name": "Fetch Article Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        656
+      ]
     }
   ],
   "pinData": {},
@@ -800,7 +822,7 @@
       "main": [
         [
           {
-            "node": "Publish to LinkedIn",
+            "node": "Fetch Article Page",
             "type": "main",
             "index": 0
           }
@@ -932,6 +954,17 @@
         [
           {
             "node": "Set Channel IDs (Success)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Article Page": {
+      "main": [
+        [
+          {
+            "node": "Extract OG Image URL",
             "type": "main",
             "index": 0
           }
