@@ -533,7 +533,7 @@
             {
               "id": "997b35ab-38c7-4385-b7bb-c8894702ae42",
               "name": "person_urn",
-              "value": "=urn:li:person:{{ $env.LINKEDIN_PERSON_ID }}",
+              "value": "={{ 'urn:li:person:' + $env.LINKEDIN_PERSON_ID }}",
               "type": "string"
             }
           ]
