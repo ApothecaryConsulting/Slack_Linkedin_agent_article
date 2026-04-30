@@ -49,6 +49,15 @@
                 "operation": "notEmpty",
                 "singleValue": true
               }
+            },
+            {
+              "id": "condition-5",
+              "leftValue": "={{ $json.text }}",
+              "rightValue": "*LinkedIn Post Ready for Approval*",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
             }
           ],
           "combinator": "or"
@@ -836,6 +845,19 @@
     },
     {
       "parameters": {
+        "jsCode": "return { json: $('Extract Upload Details').first().json };"
+      },
+      "id": "b3c4d5e6-f7a8-9012-bcde-f01234567890",
+      "name": "Restore LinkedIn Post Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        496
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://api.linkedin.com/v2/ugcPosts",
         "authentication": "predefinedCredentialType",
@@ -1241,6 +1263,17 @@
       ]
     },
     "Upload Image to LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Restore LinkedIn Post Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore LinkedIn Post Data": {
       "main": [
         [
           {
