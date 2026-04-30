@@ -60,7 +60,7 @@ linkedin-article-agent/
 ├── .gitignore
 │
 ├── workflow/
-│   └── Slack → OpenAI → LinkedIn Publisher.json
+│   └── slack-to-linkedin-publisher.json
 │
 └── README.md
 ```
@@ -154,7 +154,7 @@ Forwarding https://revisional-xxxxx.ngrok-free.dev -> http://localhost:5678
 2. Click **Import Workflow**
 3. Import:
    ```
-   workflows/slack_to_linkedin_approval.json
+   workflow/slack-to-linkedin-publisher.json
    ```
 4. Save the workflow
 
