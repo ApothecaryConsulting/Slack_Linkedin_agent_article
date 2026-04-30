@@ -669,27 +669,6 @@
     },
     {
       "parameters": {
-        "person": "YOUR_LINKEDIN_PERSON_ID",
-        "text": "={{$json.final_text}}",
-        "additionalFields": {}
-      },
-      "type": "n8n-nodes-base.linkedIn",
-      "typeVersion": 1,
-      "position": [
-        3104,
-        656
-      ],
-      "id": "86571c9d-d9ea-4e7e-bb75-31c58e8054e3",
-      "name": "Publish to LinkedIn",
-      "credentials": {
-        "linkedInOAuth2Api": {
-          "id": "HHKrfv4Oqo0pv7UX",
-          "name": "LinkedIn account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "method": "GET",
         "url": "={{ $json.post_link }}",
         "options": {
@@ -876,6 +855,41 @@
       "position": [
         4840,
         496
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "HHKrfv4Oqo0pv7UX",
+          "name": "LinkedIn account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"author\": \"={{ $json.person_urn }}\",\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": \"={{ $json.final_text }}\"\n      },\n      \"shareMediaCategory\": \"NONE\"\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
+        "options": {}
+      },
+      "id": "547d7c34-033c-467d-aecf-92eccf381d3d",
+      "name": "Publish to LinkedIn (text only)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3960,
+        816
       ],
       "credentials": {
         "linkedInOAuth2Api": {
@@ -1123,17 +1137,6 @@
         ]
       ]
     },
-    "Publish to LinkedIn": {
-      "main": [
-        [
-          {
-            "node": "Set Channel IDs (Success)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Fetch Article Page": {
       "main": [
         [
@@ -1219,6 +1222,17 @@
       ]
     },
     "Publish to LinkedIn (with image)": {
+      "main": [
+        [
+          {
+            "node": "Set Channel IDs (Success)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish to LinkedIn (text only)": {
       "main": [
         [
           {
