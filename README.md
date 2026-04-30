@@ -62,9 +62,6 @@ linkedin-article-agent/
 ├── workflow/
 │   └── Slack → OpenAI → LinkedIn Publisher.json
 │
-├── scripts/
-│   └── script.p1
-│
 └── README.md
 ```
 

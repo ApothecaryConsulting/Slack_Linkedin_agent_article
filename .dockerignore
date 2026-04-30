@@ -4,5 +4,4 @@ n8n_data/
 *.log
 .claude/
 workflow/
-scripts/
 README.md

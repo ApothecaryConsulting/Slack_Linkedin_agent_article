@@ -1,5 +1,0 @@
-# Start n8n
-docker compose up -d
-
-# Start ngrok (assumes ngrok is installed and on PATH)
-ngrok http 5678
