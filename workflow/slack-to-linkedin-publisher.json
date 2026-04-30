@@ -822,6 +822,32 @@
         4400,
         496
       ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.upload_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "5a163507-f510-4e39-a50c-b57d8713eb20",
+      "name": "Upload Image to LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        496
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "HHKrfv4Oqo0pv7UX",
+          "name": "LinkedIn account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -1140,6 +1166,17 @@
         [
           {
             "node": "Upload Image to LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Image to LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Publish to LinkedIn (with image)",
             "type": "main",
             "index": 0
           }
