@@ -670,7 +670,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $json.post_link }}",
+        "url": "={{ $json.post_link.match(/https?:\\/\\/[^\\s\"']+/)?.[0] }}",
         "options": {
           "timeout": 10000,
           "redirect": {
