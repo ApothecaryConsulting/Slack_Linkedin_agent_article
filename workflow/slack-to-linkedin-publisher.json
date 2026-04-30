@@ -756,6 +756,41 @@
         3740,
         656
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/assets?action=registerUpload",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"registerUploadRequest\": {\n    \"recipes\": [\n      \"urn:li:digitalmediaRecipe:feedshare-image\"\n    ],\n    \"owner\": \"={{ $json.person_urn }}\",\n    \"serviceRelationships\": [\n      {\n        \"relationshipType\": \"OWNER\",\n        \"identifier\": \"urn:li:userGeneratedContent\"\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "9c49876d-5618-4a3f-8c91-ef99c0029e78",
+      "name": "Register LinkedIn Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3960,
+        496
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "HHKrfv4Oqo0pv7UX",
+          "name": "LinkedIn account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -1041,6 +1076,17 @@
         [
           {
             "node": "Publish to LinkedIn (text only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register LinkedIn Upload": {
+      "main": [
+        [
+          {
+            "node": "Extract Upload Details",
             "type": "main",
             "index": 0
           }
