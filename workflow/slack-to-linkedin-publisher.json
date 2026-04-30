@@ -663,7 +663,7 @@
     },
     {
       "parameters": {
-        "person": "7MBBZ4Rbor",
+        "person": "YOUR_LINKEDIN_PERSON_ID",
         "text": "={{$json.final_text}}",
         "additionalFields": {}
       },
