@@ -247,7 +247,7 @@
           "mode": "id"
         },
         "messageType": "block",
-        "blocksUi": "={{ $json.approval_blocks.replace(/__RESUME_URL__/g, $execution.resumeUrl || '') }}",
+        "blocksUi": "={\n  \"text\": \"LinkedIn Post Ready for Approval\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*LinkedIn Post Ready for Approval*\\n\\n*Draft:*\\n{{ $json.post_text }}\\n{{ $json.post_link }}\\n{{ $json.draft_hashtags }}\"\n      }\n    },\n    {{ $json.approval_image_block }}\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        {\n          \"type\": \"button\",\n          \"text\": { \"type\": \"plain_text\", \"text\": \"Approve\" },\n          \"style\": \"primary\",\n          \"url\": \"{{ ($execution.resumeUrl || '') }}&decision=approve\"\n        },\n        {\n          \"type\": \"button\",\n          \"text\": { \"type\": \"plain_text\", \"text\": \"Reject\" },\n          \"style\": \"danger\",\n          \"url\": \"{{ ($execution.resumeUrl || '') }}&decision=reject\"\n        }\n      ]\n    }\n  ]\n}\n",
         "text": "=*LinkedIn Post Ready for Approval*\n\nDraft:\n{{ $json.post_text }}\n{{ $json.hashtags }}\n\nApprove:\n{{ $execution.resumeUrl }}&decision=approve\n\nReject:\n{{ $execution.resumeUrl }}&decision=reject\n",
         "otherOptions": {}
       },
@@ -906,7 +906,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst imageBlock = item.image_url ? [{\n  type: 'image',\n  image_url: item.image_url,\n  alt_text: 'Article preview'\n}] : [];\n\nconst postText = item.post_text || '';\nconst postLink = item.post_link || '';\nconst hashtags = item.draft_hashtags || '';\n\nconst blocks = {\n  text: 'LinkedIn Post Ready for Approval',\n  blocks: [\n    {\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*LinkedIn Post Ready for Approval*\\n\\n*Draft:*\\n${postText}\\n${postLink}\\n${hashtags}`\n      }\n    },\n    ...imageBlock,\n    {\n      type: 'actions',\n      elements: [\n        {\n          type: 'button',\n          text: { type: 'plain_text', text: 'Approve' },\n          style: 'primary',\n          url: '__RESUME_URL__&decision=approve'\n        },\n        {\n          type: 'button',\n          text: { type: 'plain_text', text: 'Reject' },\n          style: 'danger',\n          url: '__RESUME_URL__&decision=reject'\n        }\n      ]\n    }\n  ]\n};\n\nreturn { json: { ...item, approval_blocks: JSON.stringify(blocks) } };"
+        "jsCode": "const item = $input.first().json;\nconst imageUrl = item.image_url || null;\nconst approval_image_block = imageUrl\n  ? '{\"type\":\"image\",\"image_url\":' + JSON.stringify(imageUrl) + ',\"alt_text\":\"Article preview\"},'\n  : '';\nreturn { json: { ...item, approval_image_block } };"
       },
       "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "name": "Build Approval Blocks",
