@@ -7,7 +7,7 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict",
+            "typeValidation": "loose",
             "version": 1
           },
           "conditions": [
@@ -53,10 +53,29 @@
             {
               "id": "condition-5",
               "leftValue": "={{ $json.text }}",
-              "rightValue": "*LinkedIn Post Ready for Approval*",
+              "rightValue": "LinkedIn Post Ready for Approval",
               "operator": {
                 "type": "string",
-                "operation": "startsWith"
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "condition-6",
+              "leftValue": "={{ $json.app_id }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "condition-7",
+              "leftValue": "={{ $json.subtype }}",
+              "rightValue": "bot_message",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
               }
             }
           ],
@@ -256,7 +275,7 @@
           "mode": "id"
         },
         "messageType": "block",
-        "blocksUi": "={\n  \"text\": \"LinkedIn Post Ready for Approval\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*LinkedIn Post Ready for Approval*\\n\\n*Draft:*\\n{{ $json.post_text }}\\n{{ $json.post_link }}\\n{{ $json.draft_hashtags }}\"\n      }\n    },\n    {{ $json.approval_image_block }}\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        {\n          \"type\": \"button\",\n          \"text\": { \"type\": \"plain_text\", \"text\": \"Approve\" },\n          \"style\": \"primary\",\n          \"url\": \"{{ ($execution.resumeUrl || '') }}&decision=approve\"\n        },\n        {\n          \"type\": \"button\",\n          \"text\": { \"type\": \"plain_text\", \"text\": \"Reject\" },\n          \"style\": \"danger\",\n          \"url\": \"{{ ($execution.resumeUrl || '') }}&decision=reject\"\n        }\n      ]\n    }\n  ]\n}\n",
+        "blocksUi": "={{ $json.approval_message_body }}",
         "text": "=*LinkedIn Post Ready for Approval*\n\nDraft:\n{{ $json.post_text }}\n{{ $json.hashtags }}\n\nApprove:\n{{ $execution.resumeUrl }}&decision=approve\n\nReject:\n{{ $execution.resumeUrl }}&decision=reject\n",
         "otherOptions": {}
       },
@@ -439,7 +458,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\n\n// Slack URL verification\nif (body.type === 'url_verification' && body.challenge) {\n  return [{ challenge: body.challenge }];\n}\n\n// Slack event callback\nif (body.type === 'event_callback') {\n  const ev = body.event || {};\n  return [{\n    slack_event: ev,\n    text: ev.text,\n    user: ev.user,\n    channel: ev.channel,\n    ts: ev.ts,\n    bot_id: ev.bot_id,\n    subtype: ev.subtype,\n    thread_ts: ev.thread_ts,\n    raw: body\n  }];\n}\n\nreturn [{ raw: body }];\n"
+        "jsCode": "const body = $json.body ?? $json;\n\n// Slack URL verification\nif (body.type === 'url_verification' && body.challenge) {\n  return [{ challenge: body.challenge }];\n}\n\n// Slack event callback\nif (body.type === 'event_callback') {\n  const ev = body.event || {};\n  return [{\n    slack_event: ev,\n    text: ev.text,\n    user: ev.user,\n    channel: ev.channel,\n    ts: ev.ts,\n    bot_id: ev.bot_id,\n    app_id: ev.app_id,\n    subtype: ev.subtype,\n    thread_ts: ev.thread_ts,\n    raw: body\n  }];\n}\n\nreturn [{ raw: body }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -706,7 +725,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const html = $input.first().json.data || '';\nconst originalItem = $('Safety Gate').first().json;\n\nconst match =\n  html.match(/<meta[^>]+property=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)[\"']/i) ||\n  html.match(/<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+property=[\"']og:image[\"']/i);\n\nreturn { json: { ...originalItem, image_url: match ? match[1] : null } };"
+        "jsCode": "const html = $input.first().json.data || '';\nconst originalItem = $('Safety Gate').first().json;\n\nconst match =\n  html.match(/<meta[^>]+property=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)[\"']/i) ||\n  html.match(/<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+property=[\"']og:image[\"']/i);\n\nconst rawUrl = match ? match[1] : null;\nconst image_url = rawUrl && /\\.(jpe?g|png|gif)(\\?|$)/i.test(rawUrl) ? rawUrl : null;\n\nreturn { json: { ...originalItem, image_url } };"
       },
       "id": "662d2557-aeb4-4f25-a1ad-bbd767e9ee0b",
       "name": "Extract OG Image URL",
@@ -873,7 +892,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"author\": \"{{ $json.person_urn }}\",\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": \"{{ $json.final_text }}\"\n      },\n      \"shareMediaCategory\": \"IMAGE\",\n      \"media\": [\n        {\n          \"status\": \"READY\",\n          \"media\": \"{{ $json.asset_urn }}\"\n        }\n      ]\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
+        "jsonBody": "={\n  \"author\": {{ JSON.stringify($json.person_urn) }},\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": {{ JSON.stringify($json.final_text) }}\n      },\n      \"shareMediaCategory\": \"IMAGE\",\n      \"media\": [\n        {\n          \"status\": \"READY\",\n          \"media\": {{ JSON.stringify($json.asset_urn) }}\n        }\n      ]\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
         "options": {}
       },
       "id": "dbf2de4a-6a58-4528-ba58-796882f4c262",
@@ -908,7 +927,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"author\": \"{{ $json.person_urn }}\",\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": \"{{ $json.final_text }}\"\n      },\n      \"shareMediaCategory\": \"NONE\"\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
+        "jsonBody": "={\n  \"author\": {{ JSON.stringify($json.person_urn) }},\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": {{ JSON.stringify($json.final_text) }}\n      },\n      \"shareMediaCategory\": \"NONE\"\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
         "options": {}
       },
       "id": "547d7c34-033c-467d-aecf-92eccf381d3d",
@@ -928,7 +947,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst imageUrl = item.image_url || null;\nconst approval_image_block = imageUrl\n  ? '{\"type\":\"image\",\"image_url\":' + JSON.stringify(imageUrl) + ',\"alt_text\":\"Article preview\"},'\n  : '';\nreturn { json: { ...item, approval_image_block } };"
+        "jsCode": "const item = $input.first().json;\nconst rawImageUrl = item.image_url || null;\nconst imageUrl = rawImageUrl && /\\.(jpe?g|png|gif)(\\?|$)/i.test(rawImageUrl) ? rawImageUrl : null;\nconst resumeUrl = $execution.resumeUrl || '';\n\nconst sectionText = `*LinkedIn Post Ready for Approval*\\n\\n*Draft:*\\n${item.post_text || ''}\\n${item.post_link || ''}\\n${item.draft_hashtags || ''}`;\n\nconst blocks = [\n  { type: 'section', text: { type: 'mrkdwn', text: sectionText } }\n];\n\nif (imageUrl) {\n  blocks.push({ type: 'image', image_url: imageUrl, alt_text: 'Article preview' });\n}\n\nblocks.push({\n  type: 'actions',\n  elements: [\n    { type: 'button', text: { type: 'plain_text', text: 'Approve' }, style: 'primary', url: `${resumeUrl}&decision=approve` },\n    { type: 'button', text: { type: 'plain_text', text: 'Reject' }, style: 'danger', url: `${resumeUrl}&decision=reject` }\n  ]\n});\n\nconst approval_message_body = JSON.stringify({ text: 'LinkedIn Post Ready for Approval', blocks });\n\nreturn { json: { ...item, approval_message_body } };"
       },
       "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "name": "Build Approval Blocks",
