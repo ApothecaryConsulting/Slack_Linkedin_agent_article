@@ -14,6 +14,14 @@ jobs:
         with:
           fetch-depth: 2   # need HEAD~1 to recover deleted files
 
+      - name: Validate secrets
+        env:
+          N8N_API_URL: ${{ secrets.N8N_API_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+        run: |
+          [ -n "$N8N_API_URL" ] || { echo "ERROR: N8N_API_URL secret is not set" >&2; exit 1; }
+          [ -n "$N8N_API_KEY" ] || { echo "ERROR: N8N_API_KEY secret is not set" >&2; exit 1; }
+
       - name: Upsert changed workflows
         env:
           N8N_API_URL: ${{ secrets.N8N_API_URL }}
