@@ -13,6 +13,7 @@ FILE="$2"
 API_URL="${N8N_API_URL:?N8N_API_URL is required}"
 API_KEY="${N8N_API_KEY:?N8N_API_KEY is required}"
 AUTH_HEADER="X-N8N-API-KEY: $API_KEY"
+CURL_OPTS=(--connect-timeout 10 --max-time 30)
 
 # Call n8n API and print a summary; fail loudly if the response is not JSON
 # or does not contain the expected fields.
@@ -21,7 +22,7 @@ api_call() {
   local url="$1"; shift
   local response http_code
 
-  response=$(curl -s -w '\n__HTTP_STATUS__%{http_code}' "$@" -X "$method" "$url")
+  response=$(curl -s "${CURL_OPTS[@]}" -w '\n__HTTP_STATUS__%{http_code}' "$@" -X "$method" "$url")
   http_code=$(echo "$response" | tail -1 | sed 's/__HTTP_STATUS__//')
   response=$(echo "$response" | sed '$d')
 
@@ -56,7 +57,7 @@ upsert_workflow() {
   # with an "id" field — guards against the n8n UI's SPA returning HTTP 200
   # with HTML for any unknown path.
   local existing
-  existing=$(curl -s -H "$AUTH_HEADER" "$API_URL/api/v1/workflows/$id")
+  existing=$(curl -s "${CURL_OPTS[@]}" -H "$AUTH_HEADER" "$API_URL/api/v1/workflows/$id")
   local workflow_exists=false
   if echo "$existing" | jq -e '.id' > /dev/null 2>&1; then
     workflow_exists=true
@@ -78,9 +79,9 @@ upsert_workflow() {
 
   if [ "$active" = "true" ]; then
     echo "Activating: $name"
-    curl -s -X POST -H "$AUTH_HEADER" "$API_URL/api/v1/workflows/$id/activate" > /dev/null
+    curl -s "${CURL_OPTS[@]}" -X POST -H "$AUTH_HEADER" "$API_URL/api/v1/workflows/$id/activate" > /dev/null
   else
-    curl -s -X POST -H "$AUTH_HEADER" "$API_URL/api/v1/workflows/$id/deactivate" > /dev/null
+    curl -s "${CURL_OPTS[@]}" -X POST -H "$AUTH_HEADER" "$API_URL/api/v1/workflows/$id/deactivate" > /dev/null
   fi
 }
 
@@ -102,7 +103,7 @@ delete_workflow() {
   fi
 
   echo "Deleting: $name ($id)"
-  curl -s -X DELETE \
+  curl -s "${CURL_OPTS[@]}" -X DELETE \
     -H "$AUTH_HEADER" \
     "$API_URL/api/v1/workflows/$id"
 }
