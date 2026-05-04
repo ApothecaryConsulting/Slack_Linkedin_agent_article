@@ -1,5 +1,5 @@
 {
-  "name": "Slack \u2192 OpenAI \u2192 LinkedIn Publisher",
+  "name": "Slack → OpenAI → LinkedIn Publisher",
   "nodes": [
     {
       "parameters": {
@@ -12,70 +12,13 @@
           },
           "conditions": [
             {
-              "id": "condition-1",
-              "leftValue": "={{ $json.text }}",
-              "rightValue": "!skip",
-              "operator": {
-                "type": "string",
-                "operation": "startsWith"
-              }
-            },
-            {
-              "id": "condition-2",
-              "leftValue": "={{ $json.text }}",
-              "rightValue": 0,
-              "operator": {
-                "type": "string",
-                "operation": "empty",
-                "singleValue": true
-              }
-            },
-            {
-              "id": "condition-3",
+              "id": "condition-bot-id",
               "leftValue": "={{ $json.bot_id }}",
               "rightValue": "true",
               "operator": {
                 "type": "string",
                 "operation": "notEmpty",
                 "singleValue": true
-              }
-            },
-            {
-              "id": "condition-4",
-              "leftValue": "={{ $json.thread_ts }}",
-              "rightValue": "true",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            },
-            {
-              "id": "condition-5",
-              "leftValue": "={{ $json.text }}",
-              "rightValue": "LinkedIn Post Ready for Approval",
-              "operator": {
-                "type": "string",
-                "operation": "contains"
-              }
-            },
-            {
-              "id": "condition-6",
-              "leftValue": "={{ $json.app_id }}",
-              "rightValue": "true",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            },
-            {
-              "id": "condition-7",
-              "leftValue": "={{ $json.subtype }}",
-              "rightValue": "bot_message",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
               }
             }
           ],
@@ -84,7 +27,7 @@
         "options": {}
       },
       "id": "717ed410-7df1-49c2-b120-77814688780a",
-      "name": "Ignore Rules",
+      "name": "Is Bot Message?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
@@ -146,6 +89,80 @@
     },
     {
       "parameters": {
+        "jsCode": "const userId = $input.first().json.source_user;\nconst userConfigs = JSON.parse($env.USER_CONFIG);\nconst config = userConfigs[userId];\n\nif (!config) {\n  return [{ json: { ...$input.first().json, user_configured: false } }];\n}\n\nreturn [{\n  json: {\n    ...$input.first().json,\n    user_configured: true,\n    user_linkedin_person_id: config.linkedin_person_id,\n    user_display_name: config.name,\n    sub_workflow_id: config.sub_workflow_id\n  }\n}];\n"
+      },
+      "id": "resolve-user-config-001",
+      "name": "Resolve User Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "user-configured-check",
+              "leftValue": "={{ $json.user_configured }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "is-user-configured-001",
+      "name": "Is User Configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.source_channel }}",
+          "mode": "id"
+        },
+        "text": "=👋 You're not yet configured for the LinkedIn publisher. Contact your team admin to get set up.",
+        "otherOptions": {}
+      },
+      "id": "not-configured-reply-001",
+      "name": "Not Configured Reply",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1856,
+        240
+      ],
+      "webhookId": "not-configured-reply-wh",
+      "credentials": {
+        "slackApi": {
+          "id": "qBHktyyLDogsMSxz",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -186,7 +203,7 @@
           "value": "={{ $json.log_channel_id }}",
           "mode": "id"
         },
-        "text": "=\u26a0\ufe0f *JSON Parse Error*\n\n*Error:* {{ $json.error_message }}\n\n*Original Slack message:*\n{{ $json.raw_text }}\n\n*Raw OpenAI response:*\n```{{ JSON.stringify($json.raw_response, null, 2) }}```",
+        "text": "=⚠️ *JSON Parse Error*\n\n*Error:* {{ $json.error_message }}\n\n*Original Slack message:*\n{{ $json.raw_text }}\n\n*Raw OpenAI response:*\n```{{ JSON.stringify($json.raw_response, null, 2) }}```",
         "otherOptions": {}
       },
       "id": "562c9bf8-b85c-4c46-a00f-0730f0953596",
@@ -247,7 +264,7 @@
           "value": "={{ $json.log_channel_id}}",
           "mode": "id"
         },
-        "text": "=\ud83d\uded1 *Safety Check Failed*\n\n*Reason:* {{ $json.notes }}\n\n*Original Slack message:*\n{{ $json.raw_text }}\n\n*Safer alternative suggested:*\n{{ $json.post_text }}",
+        "text": "=🛑 *Safety Check Failed*\n\n*Reason:* {{ $json.notes }}\n\n*Original Slack message:*\n{{ $json.raw_text }}\n\n*Safer alternative suggested:*\n{{ $json.post_text }}",
         "otherOptions": {}
       },
       "id": "5c9cf7e8-0b4b-4336-a43e-cad16afbaf58",
@@ -347,33 +364,6 @@
     },
     {
       "parameters": {
-        "select": "channel",
-        "channelId": {
-          "__rl": true,
-          "value": "={{ $json.log_channel_id}}",
-          "mode": "id"
-        },
-        "text": "=\u274c *LinkedIn Post Rejected*\n\nPost was not approved for publishing.",
-        "otherOptions": {}
-      },
-      "id": "a0846faa-8bc4-449c-891b-486d053ad64b",
-      "name": "Log Rejection",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.2,
-      "position": [
-        3168,
-        288
-      ],
-      "webhookId": "0cab33f0-7240-435d-b818-61ad7e006588",
-      "credentials": {
-        "slackApi": {
-          "id": "qBHktyyLDogsMSxz",
-          "name": "Slack account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "jsCode": "const item = $input.first().json;\nconst formattedHashtags = (item.draft_hashtags || '')\n  .split(/\\s+/)\n  .filter(Boolean)\n  .map(t => t.startsWith('#') ? t : `#${t}`)\n  .join(' ');\n\nconst postLink = item.post_link ? `\\n\\n${item.post_link}` : '';\nconst hashtagSection = formattedHashtags ? `\\n\\n${formattedHashtags}` : '';\nconst final_text = item.post_text + postLink + hashtagSection;\n\nreturn {\n  json: {\n    ...item,\n    final_text: final_text,\n    final_hashtags: formattedHashtags,\n    image_url: item.draft_image_url || null\n  }\n};"
       },
       "id": "186abd2d-8428-4cb0-a5b8-6c4ef820bfd6",
@@ -393,7 +383,7 @@
           "value": "={{ $json.log_channel_id }}",
           "mode": "id"
         },
-        "text": "=\u2705 *Posted to LinkedIn Successfully*\n\n*Status:* {{ $json.statusCode || 'Success' }}\n\n*Post length:* {{ $('Build Final LinkedIn Text').first().json.final_text.length }} characters",
+        "text": "=✅ *Posted to LinkedIn Successfully*\n\n*User:* {{ $('Resolve User Config').first().json.user_display_name }}\n*Status:* {{ $json.statusCode || 'Success' }}\n\n*Post length:* {{ $('Build Final LinkedIn Text').first().json.final_text.length }} characters",
         "otherOptions": {}
       },
       "id": "21841bb2-6967-435c-a51a-f83cb17df377",
@@ -420,7 +410,7 @@
           "value": "={{ $log.log_channel_id }}",
           "mode": "id"
         },
-        "text": "=\u274c *Workflow Error*\n\n*Node:* {{ $node.name }}\n*Error:* {{ $json.error?.message || 'Unknown error' }}\n\n*Original message:*\n{{ $json.raw_text || 'N/A' }}\n\n*Stack trace:*\n```{{ $json.error?.stack || 'N/A' }}```",
+        "text": "=❌ *Workflow Error*\n\n*Node:* {{ $node.name }}\n*Error:* {{ $json.error?.message || 'Unknown error' }}\n\n*Original message:*\n{{ $json.raw_text || 'N/A' }}\n\n*Stack trace:*\n```{{ $json.error?.stack || 'N/A' }}```",
         "otherOptions": {}
       },
       "id": "c2a8c6db-03ae-4e6c-8364-21a0226c91e0",
@@ -517,7 +507,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        1408,
+        1856,
         368
       ],
       "id": "e10a44b3-49d4-4c29-93dc-1afb3e32c69b",
@@ -536,8 +526,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1632,
-        336
+        2080,
+        368
       ],
       "id": "b5bea569-5d9e-414b-b3c3-61eb4e504990",
       "name": "Parse OpenAI Response"
@@ -549,19 +539,19 @@
             {
               "id": "16e29578-700e-4c14-b3af-cb0fa555d171",
               "name": "log_channel_id",
-              "value": "C0AG7573N0Y",
+              "value": "={{ $env.LOG_CHANNEL_ID }}",
               "type": "string"
             },
             {
               "id": "863bd63a-d747-4a5b-b424-33ba7604d7f8",
               "name": "approval_channel_id",
-              "value": "C0AG7573N0Y",
+              "value": "={{ $('Prepare Input').first().json.source_channel }}",
               "type": "string"
             },
             {
               "id": "997b35ab-38c7-4385-b7bb-c8894702ae42",
               "name": "person_urn",
-              "value": "={{ 'urn:li:person:' + $env.LINKEDIN_PERSON_ID }}",
+              "value": "={{ 'urn:li:person:' + $('Resolve User Config').first().json.user_linkedin_person_id }}",
               "type": "string"
             }
           ]
@@ -648,13 +638,7 @@
             {
               "id": "16e29578-700e-4c14-b3af-cb0fa555d171",
               "name": "log_channel_id",
-              "value": "C0AG7573N0Y",
-              "type": "string"
-            },
-            {
-              "id": "863bd63a-d747-4a5b-b424-33ba7604d7f8",
-              "name": "approval_channel_id",
-              "value": "C0AG7573N0Y",
+              "value": "={{ $env.LOG_CHANNEL_ID }}",
               "type": "string"
             }
           ]
@@ -678,13 +662,7 @@
             {
               "id": "16e29578-700e-4c14-b3af-cb0fa555d171",
               "name": "log_channel_id",
-              "value": "C0AG7573N0Y",
-              "type": "string"
-            },
-            {
-              "id": "863bd63a-d747-4a5b-b424-33ba7604d7f8",
-              "name": "approval_channel_id",
-              "value": "C0AG7573N0Y",
+              "value": "={{ $env.LOG_CHANNEL_ID }}",
               "type": "string"
             }
           ]
@@ -738,215 +716,6 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 1
-          },
-          "conditions": [
-            {
-              "id": "0ecfc3aa-b44b-4143-943c-a3533e25cebd",
-              "leftValue": "={{ $json.image_url }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "f3045287-a45f-4aa5-8c73-dff7c14294b3",
-      "name": "Has Image?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        3740,
-        656
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.linkedin.com/v2/assets?action=registerUpload",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "linkedInOAuth2Api",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Restli-Protocol-Version",
-              "value": "2.0.0"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"registerUploadRequest\": {\n    \"recipes\": [\n      \"urn:li:digitalmediaRecipe:feedshare-image\"\n    ],\n    \"owner\": \"{{ $json.person_urn }}\",\n    \"serviceRelationships\": [\n      {\n        \"relationshipType\": \"OWNER\",\n        \"identifier\": \"urn:li:userGeneratedContent\"\n      }\n    ]\n  }\n}",
-        "options": {}
-      },
-      "id": "9c49876d-5618-4a3f-8c91-ef99c0029e78",
-      "name": "Register LinkedIn Upload",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3960,
-        496
-      ],
-      "credentials": {
-        "linkedInOAuth2Api": {
-          "id": "HHKrfv4Oqo0pv7UX",
-          "name": "LinkedIn account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst originalItem = $('Has Image?').first().json;\nconst mechanism = item.value.uploadMechanism[\n  'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'\n];\nreturn {\n  json: {\n    ...originalItem,\n    upload_url: mechanism.uploadUrl,\n    asset_urn: item.value.asset\n  }\n};"
-      },
-      "id": "77e6beef-46e3-4f24-a002-4dfd0ce6c974",
-      "name": "Extract Upload Details",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        4180,
-        496
-      ]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $json.image_url }}",
-        "responseFormat": "file",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "e583dc29-5d47-4da2-a4c9-ffd572ddb6e1",
-      "name": "Fetch Image Binary",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        4400,
-        496
-      ]
-    },
-    {
-      "parameters": {
-        "method": "PUT",
-        "url": "={{ $json.upload_url }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "linkedInOAuth2Api",
-        "sendBody": true,
-        "contentType": "binaryData",
-        "inputDataFieldName": "data",
-        "options": {}
-      },
-      "id": "5a163507-f510-4e39-a50c-b57d8713eb20",
-      "name": "Upload Image to LinkedIn",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        4620,
-        496
-      ],
-      "credentials": {
-        "linkedInOAuth2Api": {
-          "id": "HHKrfv4Oqo0pv7UX",
-          "name": "LinkedIn account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "return { json: $('Extract Upload Details').first().json };"
-      },
-      "id": "b3c4d5e6-f7a8-9012-bcde-f01234567890",
-      "name": "Restore LinkedIn Post Data",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        4840,
-        496
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.linkedin.com/v2/ugcPosts",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "linkedInOAuth2Api",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Restli-Protocol-Version",
-              "value": "2.0.0"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"author\": {{ JSON.stringify($json.person_urn) }},\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": {{ JSON.stringify($json.final_text) }}\n      },\n      \"shareMediaCategory\": \"IMAGE\",\n      \"media\": [\n        {\n          \"status\": \"READY\",\n          \"media\": {{ JSON.stringify($json.asset_urn) }}\n        }\n      ]\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
-        "options": {}
-      },
-      "id": "dbf2de4a-6a58-4528-ba58-796882f4c262",
-      "name": "Publish to LinkedIn (with image)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        4840,
-        496
-      ],
-      "credentials": {
-        "linkedInOAuth2Api": {
-          "id": "HHKrfv4Oqo0pv7UX",
-          "name": "LinkedIn account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.linkedin.com/v2/ugcPosts",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "linkedInOAuth2Api",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Restli-Protocol-Version",
-              "value": "2.0.0"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"author\": {{ JSON.stringify($json.person_urn) }},\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": {{ JSON.stringify($json.final_text) }}\n      },\n      \"shareMediaCategory\": \"NONE\"\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
-        "options": {}
-      },
-      "id": "547d7c34-033c-467d-aecf-92eccf381d3d",
-      "name": "Publish to LinkedIn (text only)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3960,
-        816
-      ],
-      "credentials": {
-        "linkedInOAuth2Api": {
-          "id": "HHKrfv4Oqo0pv7UX",
-          "name": "LinkedIn account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "jsCode": "const item = $input.first().json;\nconst rawImageUrl = item.image_url || null;\nconst imageUrl = rawImageUrl && /\\.(jpe?g|png|gif)(\\?|$)/i.test(rawImageUrl) ? rawImageUrl : null;\nconst resumeUrl = $execution.resumeUrl || '';\n\nconst sectionText = `*LinkedIn Post Ready for Approval*\\n\\n*Draft:*\\n${item.post_text || ''}\\n${item.post_link || ''}\\n${item.draft_hashtags || ''}`;\n\nconst blocks = [\n  { type: 'section', text: { type: 'mrkdwn', text: sectionText } }\n];\n\nif (imageUrl) {\n  blocks.push({ type: 'image', image_url: imageUrl, alt_text: 'Article preview' });\n}\n\nblocks.push({\n  type: 'actions',\n  elements: [\n    { type: 'button', text: { type: 'plain_text', text: 'Approve' }, style: 'primary', url: `${resumeUrl}&decision=approve` },\n    { type: 'button', text: { type: 'plain_text', text: 'Reject' }, style: 'danger', url: `${resumeUrl}&decision=reject` }\n  ]\n});\n\nconst approval_message_body = JSON.stringify({ text: 'LinkedIn Post Ready for Approval', blocks });\n\nreturn { json: { ...item, approval_message_body } };"
       },
       "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -957,11 +726,57 @@
         2944,
         400
       ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.log_channel_id}}",
+          "mode": "id"
+        },
+        "text": "=❌ *LinkedIn Post Rejected*\n\n*User:* {{ $('Resolve User Config').first().json.user_display_name }}\n\nPost was not approved for publishing.",
+        "otherOptions": {}
+      },
+      "id": "a0846faa-8bc4-449c-891b-486d053ad64b",
+      "name": "Log Rejection",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3168,
+        288
+      ],
+      "webhookId": "0cab33f0-7240-435d-b818-61ad7e006588",
+      "credentials": {
+        "slackApi": {
+          "id": "qBHktyyLDogsMSxz",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $('Resolve User Config').first().json.sub_workflow_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "exec-linkedin-publish-001",
+      "name": "Execute LinkedIn Publish",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        3120,
+        656
+      ]
     }
   ],
   "pinData": {},
   "connections": {
-    "Ignore Rules": {
+    "Is Bot Message?": {
       "main": [
         [
           {
@@ -983,7 +798,36 @@
       "main": [
         [
           {
+            "node": "Resolve User Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve User Config": {
+      "main": [
+        [
+          {
+            "node": "Is User Configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is User Configured?": {
+      "main": [
+        [
+          {
             "node": "OpenAI: Generate Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not Configured Reply",
             "type": "main",
             "index": 0
           }
@@ -1070,7 +914,7 @@
       "main": [
         [
           {
-            "node": "Has Image?",
+            "node": "Execute LinkedIn Publish",
             "type": "main",
             "index": 0
           }
@@ -1092,7 +936,7 @@
       "main": [
         [
           {
-            "node": "Ignore Rules",
+            "node": "Is Bot Message?",
             "type": "main",
             "index": 0
           },
@@ -1230,91 +1074,7 @@
         ]
       ]
     },
-    "Has Image?": {
-      "main": [
-        [
-          {
-            "node": "Register LinkedIn Upload",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Publish to LinkedIn (text only)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Register LinkedIn Upload": {
-      "main": [
-        [
-          {
-            "node": "Extract Upload Details",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract Upload Details": {
-      "main": [
-        [
-          {
-            "node": "Fetch Image Binary",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Image Binary": {
-      "main": [
-        [
-          {
-            "node": "Upload Image to LinkedIn",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Upload Image to LinkedIn": {
-      "main": [
-        [
-          {
-            "node": "Restore LinkedIn Post Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Restore LinkedIn Post Data": {
-      "main": [
-        [
-          {
-            "node": "Publish to LinkedIn (with image)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Publish to LinkedIn (with image)": {
-      "main": [
-        [
-          {
-            "node": "Set Channel IDs (Success)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Publish to LinkedIn (text only)": {
+    "Execute LinkedIn Publish": {
       "main": [
         [
           {
