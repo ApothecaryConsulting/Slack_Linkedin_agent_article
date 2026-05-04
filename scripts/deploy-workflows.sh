@@ -14,6 +14,32 @@ API_URL="${N8N_API_URL:?N8N_API_URL is required}"
 API_KEY="${N8N_API_KEY:?N8N_API_KEY is required}"
 AUTH_HEADER="X-N8N-API-KEY: $API_KEY"
 
+# Call n8n API and print a summary; fail loudly if the response is not JSON
+# or does not contain the expected fields.
+api_call() {
+  local method="$1"; shift
+  local url="$1"; shift
+  local response http_code
+
+  response=$(curl -s -w '\n__HTTP_STATUS__%{http_code}' "$@" -X "$method" "$url")
+  http_code=$(echo "$response" | tail -1 | sed 's/__HTTP_STATUS__//')
+  response=$(echo "$response" | sed '$d')
+
+  if ! echo "$response" | jq empty 2>/dev/null; then
+    echo "ERROR: n8n returned non-JSON (HTTP $http_code):" >&2
+    echo "$response" >&2
+    exit 1
+  fi
+
+  if [ "$http_code" -ge 400 ]; then
+    echo "ERROR: n8n returned HTTP $http_code:" >&2
+    echo "$response" | jq . >&2
+    exit 1
+  fi
+
+  echo "$response" | jq '{id:.id, name:.name}'
+}
+
 upsert_workflow() {
   local file="$1"
   local body; body=$(cat "$file")
@@ -33,18 +59,16 @@ upsert_workflow() {
 
   if [ "$status" = "200" ]; then
     echo "Updating: $name ($id)"
-    curl -s -X PUT \
+    api_call PUT "$API_URL/api/v1/workflows/$id" \
       -H "Content-Type: application/json" \
       -H "$AUTH_HEADER" \
-      -d "$body" \
-      "$API_URL/api/v1/workflows/$id" | jq '{id:.id, name:.name}'
+      -d "$body"
   else
     echo "Creating: $name ($id)"
-    curl -s -X POST \
+    api_call POST "$API_URL/api/v1/workflows" \
       -H "Content-Type: application/json" \
       -H "$AUTH_HEADER" \
-      -d "$body" \
-      "$API_URL/api/v1/workflows" | jq '{id:.id, name:.name}'
+      -d "$body"
   fi
 
   if [ "$active" = "true" ]; then
