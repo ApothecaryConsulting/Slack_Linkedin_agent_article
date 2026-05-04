@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2   # need HEAD~1 to recover deleted files
+          fetch-depth: 0   # full history needed to recover deleted files and resolve push range
 
       - name: Validate secrets
         env:
@@ -22,12 +22,12 @@ jobs:
           [ -n "$N8N_API_URL" ] || { echo "ERROR: N8N_API_URL secret is not set" >&2; exit 1; }
           [ -n "$N8N_API_KEY" ] || { echo "ERROR: N8N_API_KEY secret is not set" >&2; exit 1; }
 
-      - name: Upsert changed workflows
+      - name: Upsert all workflows
         env:
           N8N_API_URL: ${{ secrets.N8N_API_URL }}
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
         run: |
-          git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'workflow/*.json' | while read -r file; do
+          for file in workflow/*.json; do
             bash scripts/deploy-workflows.sh upsert "$file"
           done
 
@@ -36,6 +36,12 @@ jobs:
           N8N_API_URL: ${{ secrets.N8N_API_URL }}
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
         run: |
-          git diff --name-only --diff-filter=D HEAD~1 HEAD -- 'workflow/*.json' | while read -r file; do
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+          # On first push, before is the null SHA — use empty tree instead
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+          fi
+          git diff --name-only --diff-filter=D "$BEFORE" "$AFTER" -- 'workflow/*.json' | while read -r file; do
             bash scripts/deploy-workflows.sh delete "$file"
           done
