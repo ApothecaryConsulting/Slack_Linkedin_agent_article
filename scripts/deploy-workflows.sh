@@ -52,12 +52,17 @@ upsert_workflow() {
     exit 1
   fi
 
-  local status
-  status=$(curl -s -o /dev/null -w "%{http_code}" \
-    -H "$AUTH_HEADER" \
-    "$API_URL/api/v1/workflows/$id")
+  # Check existence by reading the workflow and verifying it's a JSON object
+  # with an "id" field — guards against the n8n UI's SPA returning HTTP 200
+  # with HTML for any unknown path.
+  local existing
+  existing=$(curl -s -H "$AUTH_HEADER" "$API_URL/api/v1/workflows/$id")
+  local workflow_exists=false
+  if echo "$existing" | jq -e '.id' > /dev/null 2>&1; then
+    workflow_exists=true
+  fi
 
-  if [ "$status" = "200" ]; then
+  if [ "$workflow_exists" = "true" ]; then
     echo "Updating: $name ($id)"
     api_call PUT "$API_URL/api/v1/workflows/$id" \
       -H "Content-Type: application/json" \
