@@ -1,15 +1,8 @@
 # Slack → OpenAI → LinkedIn Publisher
 
-An n8n workflow that listens for messages in a Slack channel, uses OpenAI (GPT-4.1 mini) to generate a polished LinkedIn post draft, routes it through a human approval gate, and then publishes it to LinkedIn — all with structured error logging back to Slack.
+An n8n workflow that lets team members DM a Slack bot with an article URL, uses OpenAI (GPT-4.1 mini) to generate a polished LinkedIn post draft, routes it through a private human approval gate, and then publishes it to each person's LinkedIn account — with structured error logging back to Slack.
 
-This repository contains everything needed to run an **end-to-end automation** that:
-
-1. Listens to messages in Slack
-2. Sends them to OpenAI for drafting a LinkedIn post
-3. Sends the draft to Slack for approval
-4. Posts the approved content to LinkedIn (personal or company page)
-
-The workflow is built in **n8n**, runs locally via **Docker**, and uses **ngrok** for Slack webhooks — ngrok is bundled inside the Docker image, so no separate installation is required.
+Multiple team members are supported out of the box: each person's LinkedIn account, display name, and sub-workflow reference are stored in a single `USER_CONFIG` env var.
 
 ---
 
@@ -17,33 +10,35 @@ The workflow is built in **n8n**, runs locally via **Docker**, and uses **ngrok*
 
 ```mermaid
 flowchart TD
-    A([Slack Events API]) --> B[n8n Webhook]
-    B --> C[OpenAI\nDraft LinkedIn Post]
-    C --> D[Slack\nApproval Message]
-    D --> E[Wait for Approval\nWebhook]
-    E --> F{Decision Logic}
-    F -->|Approved| G([LinkedIn Post\nPersonal or Company])
-    F -->|Rejected| H([Log Rejection → Slack])
+    A([User DMs Bot\nin Slack]) --> B[n8n Webhook]
+    B --> C{Bot message?}
+    C -->|Yes| D([Filtered Out])
+    C -->|No| E[Resolve User Config]
+    E --> F{User configured?}
+    F -->|No| G([Reply: not set up yet])
+    F -->|Yes| H[OpenAI\nDraft LinkedIn Post]
+    H --> I[Slack DM\nApproval Message]
+    I --> J[Wait for Approval\nWebhook]
+    J --> K{Decision}
+    K -->|Approved| L[Execute LinkedIn\nPublish Sub-Workflow]
+    K -->|Rejected| M([Log Rejection → Slack])
+    L --> N([Log Success → Slack])
 ```
 
 ---
 
 ## Prerequisites
 
-Each teammate must install the following **locally**:
-
 ### Required Software
-- **Docker Desktop**  
-  https://www.docker.com/products/docker-desktop
-- **Git**  
-  https://git-scm.com/
+- **Docker Desktop** — https://www.docker.com/products/docker-desktop
+- **Git** — https://git-scm.com/
 - A modern browser (Chrome recommended)
 
 > **ngrok is bundled inside the Docker image.** No separate ngrok download or installation is needed.
 
 ### Required Accounts
 - Slack workspace where you can create apps
-- LinkedIn account (admin access required for company posting)
+- LinkedIn account for each team member who will publish
 - OpenAI account with API access
 
 ---
@@ -60,7 +55,10 @@ linkedin-article-agent/
 ├── .gitignore
 │
 ├── workflow/
-│   └── slack-to-linkedin-publisher.json
+│   ├── slack-to-linkedin-publisher.json    ← Main workflow
+│   ├── linkedin-publish-user1.json         ← LinkedIn sub-workflow, user 1
+│   ├── linkedin-publish-user2.json         ← LinkedIn sub-workflow, user 2
+│   └── linkedin-publish-user3.json         ← LinkedIn sub-workflow, user 3
 │
 └── README.md
 ```
@@ -77,8 +75,6 @@ cd slack-to-linkedin-n8n
 ---
 
 ## Step 2 — Create `.env` File
-
-Copy the example file and fill in the placeholders.
 
 ```bash
 cp .env.example .env
@@ -102,11 +98,21 @@ WEBHOOK_URL=https://your-ngrok-domain.ngrok-free.app
 NGROK_AUTHTOKEN=                       # from https://dashboard.ngrok.com
 # NGROK_DOMAIN=your-static-subdomain.ngrok-free.app  # optional static domain
 
-# LinkedIn
-LINKEDIN_PERSON_ID=                    # ID portion of urn:li:person:XXXXXXXX (GET /v2/userinfo → sub field)
+# Per-user config: maps Slack user ID → LinkedIn person ID, display name,
+# and the n8n workflow ID of that user's LinkedIn publish sub-workflow.
+# sub_workflow_id is filled in after the first deploy (see Step 5b below).
+USER_CONFIG={"SLACK_ID_1":{"linkedin_person_id":"LI_ID_1","name":"Alice","sub_workflow_id":"N8N_WF_ID_1"},"SLACK_ID_2":{"linkedin_person_id":"LI_ID_2","name":"Bob","sub_workflow_id":"N8N_WF_ID_2"},"SLACK_ID_3":{"linkedin_person_id":"LI_ID_3","name":"Chance","sub_workflow_id":"N8N_WF_ID_3"}}
+
+# Shared Slack channel for team-visible logging (approvals go to individual DMs)
+LOG_CHANNEL_ID=C0AG7573N0Y
 ```
 
-> **Service credentials** (OpenAI API key, Slack Bot Token, LinkedIn OAuth) are stored inside n8n's encrypted database and configured via the n8n UI — they are not read from `.env`.
+**Finding each value:**
+- **Slack user ID** — open Slack profile → ⋮ menu → *Copy member ID* (starts with `U`)
+- **LinkedIn person ID** — call `GET https://api.linkedin.com/v2/userinfo` with the user's OAuth token; use the `sub` field
+- **`sub_workflow_id`** — leave as placeholder for now; filled in after Step 5b
+
+> **Service credentials** (OpenAI API key, Slack Bot Token, LinkedIn OAuth) are stored inside n8n's encrypted database — they are not in `.env`.
 
 ⚠️ **Never commit `.env` to GitHub**
 
@@ -118,13 +124,9 @@ LINKEDIN_PERSON_ID=                    # ID portion of urn:li:person:XXXXXXXX (G
 docker compose up -d --build
 ```
 
-This builds the custom image (n8n + ngrok), then starts the container.
-
 Verify:
 - n8n UI: http://localhost:5678
-- ngrok: started automatically inside the container when `NGROK_AUTHTOKEN` is set in `.env`
-
-To confirm ngrok is running:
+- ngrok started automatically when `NGROK_AUTHTOKEN` is set
 
 ```bash
 docker compose logs n8n | grep -i ngrok
@@ -134,70 +136,96 @@ docker compose logs n8n | grep -i ngrok
 
 ## Step 4 — Confirm the ngrok Tunnel URL
 
-If you set `NGROK_DOMAIN` in `.env`, your tunnel URL is fixed and never changes — skip the rest of this step.
+If you set `NGROK_DOMAIN`, your tunnel URL is fixed — skip this step.
 
-If you did **not** set `NGROK_DOMAIN`, inspect the container logs to find the assigned URL:
-
+Otherwise, inspect logs:
 ```bash
 docker compose logs n8n
 ```
+Look for: `Forwarding https://revisional-xxxxx.ngrok-free.dev -> http://localhost:5678`
 
-Look for a line like:
-```
-Forwarding https://revisional-xxxxx.ngrok-free.dev -> http://localhost:5678
-```
-
-👉 **Copy the HTTPS ngrok URL** — you will need it in the Slack app setup below.
+Copy the HTTPS ngrok URL — you need it for the Slack app setup.
 
 ---
 
-## Step 5 — Import the Workflow into n8n
+## Step 5 — Import Workflows into n8n
+
+### 5a — Import all four workflows
 
 1. Open http://localhost:5678
-2. Click **Import Workflow**
-3. Import:
-   ```
-   workflow/slack-to-linkedin-publisher.json
-   ```
-4. Save the workflow
+2. Click **Import Workflow** and import each file in `workflow/`:
+   - `slack-to-linkedin-publisher.json` ← main workflow
+   - `linkedin-publish-user1.json`
+   - `linkedin-publish-user2.json`
+   - `linkedin-publish-user3.json`
+3. Save each workflow after importing
+
+### 5b — Record the sub-workflow IDs
+
+After importing, each sub-workflow has a URL like:
+```
+http://localhost:5678/workflow/12345
+```
+The number at the end is the n8n workflow ID. Update `.env` with these IDs:
+
+```env
+USER_CONFIG={"SLACK_ID_1":{"linkedin_person_id":"LI_ID_1","name":"Alice","sub_workflow_id":"12345"},...}
+```
+
+Restart the container to apply the updated env:
+```bash
+docker compose restart
+```
 
 ---
 
 ## Step 6 — Create Credentials in n8n
 
 ### OpenAI
-- Credentials → New → **HTTP Header Auth** (or OpenAI if using native node)
-- Header:
-  ```
-  Authorization: Bearer sk-xxxx
-  ```
+- Credentials → New → **OpenAI API**
+- Enter your API key
 
 ### Slack
 - Credentials → New → **Slack**
-- Use **Bot User OAuth Token**
-- Token starts with `xoxb-...`
+- Use **Bot User OAuth Token** (starts with `xoxb-...`)
 
-### LinkedIn
+### LinkedIn (one credential per team member)
 - Credentials → New → **LinkedIn OAuth2 API**
-- Requires LinkedIn App (see below)
+- Repeat for each user who will publish
+- After creating, note each credential's ID from the n8n UI URL or API
+
+#### Wire credentials to sub-workflows
+
+For users 2 and 3, open their sub-workflow JSON files and replace the placeholder credential IDs:
+
+```json
+"credentials": {
+  "linkedInOAuth2Api": {
+    "id": "REPLACE_WITH_USER2_LINKEDIN_CRED_ID",   ← replace this
+    "name": "LinkedIn account (User 2)"
+  }
+}
+```
+
+Re-import the updated files (or update via the n8n UI directly).
 
 ---
 
-## Step 7 — Slack App Setup (Critical)
+## Step 7 — Slack App Setup
 
 ### Create Slack App
-1. https://api.slack.com/apps → **Create New App**
-2. Choose **From scratch**
-3. Select your workspace
+1. https://api.slack.com/apps → **Create New App → From scratch**
+2. Select your workspace
 
-### OAuth & Permissions
-Add bot scopes:
-- `chat:write`
-- `channels:read`
-- `channels:history`
-- `groups:read` (if using private channels)
+### OAuth & Permissions — Bot Token Scopes
+```
+chat:write
+im:read
+im:write
+im:history
+```
 
-Install app to workspace.
+Install app to workspace and copy the **Bot User OAuth Token**.
 
 ### Event Subscriptions
 1. Enable **Event Subscriptions**
@@ -207,14 +235,10 @@ Install app to workspace.
    ```
 3. Wait for **Verified**
 4. Subscribe to bot events:
-   - `message.channels`
-   - `message.groups` (if private)
+   - `message.im` ← direct messages to the bot (replaces `message.channels`)
 
-### Invite bot to channels
-In Slack:
-```
-/invite @YourBotName
-```
+### App Home
+Enable the **Messages Tab** so users can DM the bot directly.
 
 ---
 
@@ -229,81 +253,198 @@ https://www.linkedin.com/developers/apps
   http://localhost:5678/rest/oauth2-credential/callback
   ```
 
-### Required Scopes
-Personal posting:
+### Required Scopes (personal posting)
 - `w_member_social`
 - `openid`
 - `profile`
 - `email`
 
-Company posting:
-- `w_organization_social`
-- Must be approved by LinkedIn
-- You must be an admin of the Page
-
-⚠️ After changing scopes, **re-authenticate** in n8n.
+⚠️ After changing scopes, re-authenticate each user's credential in n8n.
 
 ---
 
 ## Step 9 — Webhook URLs After Restart
 
-**If `NGROK_DOMAIN` is set** (recommended): the tunnel URL is static and never changes — no action needed on restart.
+**If `NGROK_DOMAIN` is set** (recommended): static URL, no action needed.
 
-**If `NGROK_DOMAIN` is not set**: ngrok assigns a new random URL every time the container restarts. When that happens:
-
-1. Get the new ngrok URL from container logs: `docker compose logs n8n`
-2. Update:
-   - Slack Event Subscriptions → Request URL
-   - `.env` → `WEBHOOK_URL` and `N8N_EDITOR_BASE_URL`
-3. Restart the container: `docker compose restart`
+**If not set**: update on every restart:
+1. Get new URL: `docker compose logs n8n`
+2. Update Slack Event Subscriptions → Request URL
+3. Update `.env` → `WEBHOOK_URL` and `N8N_EDITOR_BASE_URL`
+4. Restart: `docker compose restart`
 
 ---
 
-## Step 10 — Activate the Workflow
+## Step 10 — Activate the Workflows
 
-In n8n:
-- Open the workflow
-- Toggle **Active** → ON
+In n8n, activate:
+1. `Slack → OpenAI → LinkedIn Publisher` (main workflow — this is the only one that needs to be Active)
 
-⚠️ Slack production webhooks **only work when Active**
+The sub-workflows (`LinkedIn Publisher - User N`) are called programmatically and do not need to be Active themselves.
 
 ---
 
 ## Step 11 — Test End-to-End
 
-1. Send a message in Slack source channel:
+1. **DM the bot** in Slack with an article URL:
    ```
-   hello world
+   https://techcrunch.com/some-article
    ```
-2. n8n drafts LinkedIn post via OpenAI
-3. Approval message appears in approval channel
+2. n8n drafts a LinkedIn post via OpenAI
+3. The bot replies **in the same DM** with the draft and Approve / Reject buttons
 4. Click **Approve**
-5. Post appears on LinkedIn
+5. Post appears on your LinkedIn profile
+
+---
+
+## How It Works
+
+### 1. Trigger — Slack DM Webhook
+When a user sends a direct message to the Slack bot, Slack fires a `message.im` event to the n8n webhook. A JavaScript code node handles URL verification challenges and normalises the payload.
+
+### 2. Bot Message Filter
+A single IF node checks whether `bot_id` is present. If yes, the message is from the bot itself and is silently dropped — preventing echo loops. Human DMs continue.
+
+### 3. Resolve User Config
+A Code node reads `USER_CONFIG` from the env and looks up the sender's Slack user ID. It attaches `user_linkedin_person_id`, `user_display_name`, and `sub_workflow_id` to the data.
+
+If the user is not in `USER_CONFIG`, they receive a friendly DM: *"You're not yet configured — contact your team admin."* The execution stops there.
+
+### 4. Respond to Webhook (Immediately)
+A `Respond to Webhook` node fires in parallel immediately after event parsing to acknowledge Slack within the required 3-second window.
+
+### 5. Prepare Input
+Extracts `raw_text`, `source_channel`, `source_user`, and `source_ts`. Crucially, `source_channel` for a DM is already the private DM channel ID — no extra API call needed.
+
+### 6. OpenAI API Call
+Sends the message text to GPT-4.1 mini with a structured system prompt. Returns JSON with:
+
+| Field | Description |
+|---|---|
+| `post_text` | 4–6 sentence LinkedIn post body |
+| `post_link` | `"Read more here: <url>"` |
+| `hashtags` | Array of hashtag strings |
+| `safety_ok` | Boolean — safe to post? |
+| `notes` | Caveats or rejection reasons |
+
+### 7. Parse OpenAI Response → Set Channel IDs
+Parses the JSON from OpenAI. Then sets runtime constants:
+- `log_channel_id` — from `LOG_CHANNEL_ID` env var (shared team log channel)
+- `approval_channel_id` — the user's DM channel (`source_channel`)
+- `person_urn` — user's LinkedIn URN from `USER_CONFIG`
+
+### 8. Check Parse Error / Safety Gate
+Branches to Slack log messages if OpenAI output is unparseable or `safety_ok` is false.
+
+### 9. Human Approval Loop
+1. **Store Draft** — saves draft fields for later merging
+2. **Build Approval Blocks** — constructs Slack Block Kit with draft text, OG image preview, and Approve/Reject buttons
+3. **Send For Approval** — posts to `approval_channel_id` (the user's DM)
+4. **Wait For Approval Reply** — pauses execution
+5. **Merge Draft + Decision** — merges stored draft with the approval callback
+6. **Approval Decision** — checks `?decision=approve`
+
+### 10. On Approval — Execute LinkedIn Publish Sub-Workflow
+**Build Final LinkedIn Text** formats the post, then **Execute LinkedIn Publish** calls the user's personal sub-workflow (identified by `sub_workflow_id` from `USER_CONFIG`). The sub-workflow handles the full LinkedIn publishing chain with that user's own OAuth2 credential:
+
+- If the article has an `og:image`: Register LinkedIn Upload → Fetch Image Binary → Upload Image → Publish with image
+- If no image: Publish text-only
+
+### 11. Log Outcome
+Success or rejection is logged to the shared `LOG_CHANNEL_ID` Slack channel, showing the user's display name.
+
+---
+
+## Workflow Diagram
+
+```
+Slack DM → Webhook
+     │
+     ├──► Respond to Webhook (immediate 200 OK)
+     │
+Parse Slack Event
+     │
+Is Bot Message? ──► [Filtered Out]
+     │
+Prepare Input
+     │
+Resolve User Config ──► [Not Configured Reply → DM]
+     │
+Is User Configured?
+     │
+OpenAI: Generate Draft
+     │
+Parse OpenAI Response
+     │
+Set Channel IDs  (log = LOG_CHANNEL_ID, approval = DM channel, person_urn = per user)
+     │
+Check Parse Error ──► [Log Parse Error → Slack]
+     │
+Safety Gate ──► [Log Safety Failure → Slack]
+     │
+Store Draft ──► Build Approval Blocks → Send For Approval (DM) → Wait For Approval Reply
+                                                 │
+                                      Merge Draft + Decision
+                                                 │
+                                       Approval Decision
+                                      ┌──────────┴──────────┐
+                                  [Approved]            [Rejected]
+                                      │                      │
+                          Build Final LinkedIn Text   Set Channel IDs (Rejection)
+                                      │                      │
+                        Execute LinkedIn Publish        Log Rejection
+                         (per-user sub-workflow)             │
+                                      │                 Log Error → Slack
+                          Set Channel IDs (Success)
+                                      │
+                                Log Success → Slack
+```
+
+---
+
+## Multi-User: Adding a New Team Member
+
+1. Create a LinkedIn OAuth2 credential for them in n8n
+2. Copy `workflow/linkedin-publish-user1.json` → `workflow/linkedin-publish-userN.json`
+3. Change the `"name"` field to `"LinkedIn Publisher - User N"` and assign a new `"id"` (e.g. `"linkedin-pub-userN"`)
+4. Replace all credential IDs in the new file with the new user's credential ID
+5. Commit and push — CI/CD deploys it automatically
+6. Note the n8n-assigned workflow ID from the UI
+7. Add the user to `USER_CONFIG` in `.env` with their Slack ID, LinkedIn person ID, and the new workflow ID
+8. Restart the container
 
 ---
 
 ## Common Issues & Fixes
 
-### “Unknown webhook”
-- Workflow not Active
+### "Unknown webhook"
+- Main workflow not Active
 - Wrong URL (`/webhook-test` instead of `/webhook`)
 - ngrok URL changed
 
 ### Slack `channel_not_found`
 - Use **channel ID**, not name
-- Invite bot to channel
+- Confirm the bot has `im:write` scope for DMs
 
 ### LinkedIn 422 error
 - Missing `visibility`, `lifecycleState`, or `specificContent`
-- Body must be valid JSON or Expression mode
+- Body must be valid JSON in Expression mode
 
 ### Approval loses draft text
-- Ensure **Store Draft → Merge → Approval Decision** pattern is used
+- Ensure **Store Draft → Merge → Approval Decision** pattern is intact
 
 ### LinkedIn image upload fails (400/401)
-- Confirm `LINKEDIN_PERSON_ID` is set correctly in `.env` (just the ID, not the full URN)
+- Confirm `linkedin_person_id` in `USER_CONFIG` is correct (just the ID, not the full URN)
 - The LinkedIn OAuth credential must have the `w_member_social` scope
 - Re-authenticate the LinkedIn credential in n8n if the token has expired
+
+### User gets "not configured" reply
+- Their Slack user ID is missing from `USER_CONFIG` in `.env`
+- Restart the container after editing `.env`
+
+### Execute LinkedIn Publish fails with "workflow not found"
+- The `sub_workflow_id` in `USER_CONFIG` doesn't match the actual n8n workflow ID
+- Check the sub-workflow URL in n8n UI and update `.env`
 
 ---
 
@@ -312,210 +453,20 @@ In n8n:
 - Never commit `.env`
 - Never commit `n8n_data/`
 - Credentials are encrypted locally using `N8N_ENCRYPTION_KEY`
+- `USER_CONFIG` contains Slack user IDs and LinkedIn person IDs — not secrets, but keep `.env` gitignored
 
 ---
+
 ## Overview
 
 | Property | Value |
 |---|---|
-| Trigger | Slack event webhook (message posted in a channel) |
+| Trigger | Direct message to Slack bot (`message.im`) |
 | AI Model | `gpt-4.1-mini` via OpenAI Responses API |
-| Approval | Human-in-the-loop via Slack reply |
-| Output | LinkedIn post (via HTTP API) |
-| Logging | Slack channel notifications for all outcomes |
-| Total Nodes | 33 |
-
----
-
-## How It Works
-
-### 1. Trigger — Slack Webhook
-The workflow starts when Slack sends an event to an n8n webhook. A JavaScript code node handles Slack's URL verification challenge and normalises the incoming event payload (extracting `text`, `user`, `channel`, `ts`, etc.).
-
-### 2. Ignore Rules
-Before doing anything expensive, a filter node drops messages that should be skipped:
-- Message starts with `!skip`
-- Message text is empty
-- Message was sent by a bot (`bot_id` is present)
-- Message is a thread reply (`thread_ts` is present)
-
-Filtered messages go to a **Filtered Out** (no-op) node. Valid messages continue.
-
-### 3. Respond to Webhook (Immediately)
-A `Respond to Webhook` node fires in parallel immediately after the initial parse — this acknowledges Slack's event delivery within the required 3-second window so Slack doesn't retry.
-
-### 4. Prepare Input
-Extracts and renames the fields needed downstream into a clean object: `raw_text`, `source_channel`, `source_user`, `source_ts`.
-
-### 5. OpenAI API Call
-Sends the Slack message text to `https://api.openai.com/v1/responses` with a structured system prompt instructing the model to return a JSON object containing:
-
-| Field | Description |
-|---|---|
-| `post_text` | 4–6 sentence LinkedIn post body |
-| `post_link` | `"Read more here: <url>"` (the article link, separate from post text) |
-| `hashtags` | Array of relevant hashtag strings |
-| `safety_ok` | Boolean — whether the content is safe to post |
-| `notes` | Any caveats or rejection reasons from the model |
-
-### 6. Parse OpenAI Response
-A JavaScript code node extracts the model's text output from the Responses API structure and parses it as JSON. If parsing fails, it returns an error flag and the raw response for logging.
-
-### 7. Set Channel IDs
-Sets shared runtime constants used throughout the rest of the workflow:
-- `log_channel_id` — Slack channel ID for all log/error messages
-- `approval_channel_id` — Slack channel ID where approval requests are sent
-- `person_urn` — LinkedIn person URN built from `LINKEDIN_PERSON_ID` env var (`urn:li:person:...`)
-
-### 8. Check Parse Error
-If the OpenAI response couldn't be parsed as valid JSON, the workflow branches to **Log Parse Error**, which posts a ⚠️ message to the log Slack channel including the error, the original Slack message, and the raw OpenAI response.
-
-### 9. Safety Gate
-If `safety_ok` is `false`, the workflow branches to **Log Safety Failure**, which posts a 🛑 message to the log channel with the model's rejection reason and any safer alternative it suggested.
-
-### 10. Human Approval Loop
-If the content passes the safety check:
-
-1. **Store Draft** — saves the draft post fields into state for later merging.
-2. **Send For Approval** — posts the draft LinkedIn post to the approval Slack channel, asking for a reply of `approve` or `reject`.
-3. **Wait For Approval Reply** — the workflow pauses here using n8n's Wait node until a Slack reply comes back.
-4. **Merge Draft + Decision** — merges the stored draft with the approval reply.
-5. **Approval Decision** — checks whether the reply contains `approve`.
-
-### 11. On Approval — Publish to LinkedIn
-1. **Build Final LinkedIn Text** — formats hashtags (ensures each starts with `#`) and assembles `final_text` with blank-line spacing between the post body, article link, and hashtags.
-2. **Fetch Article Page** — GETs the article URL to retrieve its HTML.
-3. **Extract OG Image URL** — parses the `og:image` meta tag from the HTML. Outputs `image_url` (or `null` if not found).
-4. **Has Image?** — branches the workflow:
-   - **Image found →** Register LinkedIn Upload → Fetch Image Binary → Upload Image to LinkedIn → **Publish to LinkedIn (with image)** — calls `POST /v2/ugcPosts` with `shareMediaCategory: IMAGE` and the uploaded asset URN.
-   - **No image →** **Publish to LinkedIn (text only)** — calls `POST /v2/ugcPosts` with `shareMediaCategory: NONE`.
-5. **Log Success** — posts a ✅ confirmation to the Slack log channel.
-
-### 12. On Rejection — Log and Stop
-If the approver replied with anything other than `approve`, the workflow logs a rejection message to the Slack channel and stops.
-
----
-
-## Workflow Diagram
-
-```
-Slack Webhook
-     │
-     ├──► Respond to Webhook (immediate 200 OK)
-     │
-Parse Slack Event
-     │
-Ignore Rules ──► [Filtered Out]
-     │
-Prepare Input
-     │
-OpenAI: Generate Draft
-     │
-Parse OpenAI Response
-     │
-Set Channel IDs
-     │
-Check Parse Error ──► [Log Parse Error → Slack]
-     │
-Safety Gate ──► [Log Safety Failure → Slack]
-     │
-Store Draft ──► Send For Approval → Wait For Approval Reply
-                                         │
-                              Merge Draft + Decision
-                                         │
-                               Approval Decision
-                              ┌──────────┴──────────┐
-                          [Approved]            [Rejected]
-                              │                     │
-                  Build Final LinkedIn Text   Set Channel IDs (Rejection)
-                              │                     │
-                  Fetch Article Page          Log Rejection
-                              │                     │
-                  Extract OG Image URL        Log Error → Slack
-                              │
-                          Has Image?
-                    ┌─────────┴──────────┐
-                 [yes]                 [no]
-                    │                    │
-       Register LinkedIn Upload    Publish to LinkedIn
-                    │               (text only)
-       Extract Upload Details           │
-                    │                   │
-       Fetch Image Binary               │
-                    │                   │
-       Upload Image to LinkedIn         │
-                    │                   │
-       Publish to LinkedIn              │
-         (with image)                   │
-                    └────────┬──────────┘
-                  Set Channel IDs (Success)
-                             │
-                       Log Success → Slack
-```
-
----
-
-## Setup & Configuration
-
-### Required Credentials
-
-| Service | Credential Type | Where Used |
-|---|---|---|
-| Slack | Slack API (Bot Token) | Webhook trigger, all Slack nodes |
-| OpenAI | OpenAI API Key | HTTP Request node (Bearer token) |
-| LinkedIn | LinkedIn API Token | LinkedIn Post HTTP Request node |
-
-### Slack App Requirements
-Your Slack app must have the following enabled:
-- **Event Subscriptions** — point the Request URL to the n8n webhook URL for this workflow
-- Subscribe to **`message.channels`** bot event (or whichever channel scope applies)
-- **Bot Token Scopes:** `chat:write`, `channels:history`, `channels:read`
-
-### Channel IDs to Configure
-Update the **Set Channel IDs** node with your actual Slack channel IDs:
-
-| Variable | Description |
-|---|---|
-| `log_channel_id` | Channel where errors, safety failures, rejections, and successes are posted |
-| `approval_channel_id` | Channel where draft posts are sent for human review |
-
-### OpenAI Model
-The workflow uses `gpt-4.1-mini`. To use a different model, update the `jsonBody` in the **OpenAI: Generate Draft** node.
-
----
-
-## Skipping Messages
-
-Any message posted to the monitored Slack channel that starts with `!skip` will be silently ignored. This is useful for posting notes or links you don't want turned into LinkedIn posts.
-
----
-
-## Error Handling
-
-| Scenario | Behaviour |
-|---|---|
-| OpenAI JSON parse failure | Logs raw response + error to Slack log channel |
-| Content fails safety check | Logs reason + safer alternative suggestion to Slack log channel |
-| Post rejected by approver | Logs rejection to Slack log channel |
-| LinkedIn post failure | (Handled by downstream error branch — check your n8n error workflow settings) |
-
----
-
-## Notes
-
-- The workflow acknowledges Slack's webhook immediately in a parallel branch to avoid Slack retrying the event.
-- The Wait node will hold the execution until the approver replies in Slack. Make sure your n8n instance's execution timeout is set high enough (or use the n8n Cloud plan which supports long-running executions).
-- Hashtags from OpenAI are automatically normalised — any tag missing a leading `#` gets one added before posting.
-- The `post_link` field (the article URL) is kept separate from `post_text` by the AI prompt, so you can format the LinkedIn post however you like before publishing.
-- If the article has an `og:image` meta tag, the workflow automatically attaches it to the LinkedIn post via a 3-step LinkedIn asset upload (register → upload binary → reference URN). If no `og:image` is found, the post is published as text-only.
----
-
-## Optional Improvements
-
-- Replace ngrok with Cloudflare Tunnel (edit `docker-entrypoint.sh` to call `cloudflared` instead)
-- Add Docker health checks
-- Add retry logic for LinkedIn/OpenAI
-- Convert to multi-tenant SaaS
+| Approval | Human-in-the-loop via Slack DM reply |
+| Output | LinkedIn post via HTTP API, per-user OAuth2 credentials |
+| Logging | Shared Slack channel notifications for all outcomes |
+| Multi-user | Supported — add entries to `USER_CONFIG` env var |
 
 ---
 
@@ -524,17 +475,6 @@ Any message posted to the monitored Slack channel that starts with `!skip` will 
 If something breaks:
 1. Check container logs: `docker compose logs n8n`
 2. Verify ngrok tunnel is up (look for `Forwarding https://...` in logs)
-3. Check workflow is Active in n8n
-4. Check Slack Event Subscriptions show **Verified**
-5. Check n8n execution logs
-
----
-
-## Final Notes
-
-This setup is intentionally **explicit and reproducible**.  
-Anyone following this README should be able to stand up the full pipeline on their own machine.
-
----
-
-
+3. Check main workflow is Active in n8n
+4. Check Slack Event Subscriptions show **Verified** and `message.im` is subscribed
+5. Check n8n execution logs for the specific error node
