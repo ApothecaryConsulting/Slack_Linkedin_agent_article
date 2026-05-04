@@ -1,0 +1,323 @@
+{
+  "name": "LinkedIn Publisher - User 2",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "exec-trigger-user2",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "image-check-user2",
+              "leftValue": "={{ $json.image_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-image-user2",
+      "name": "Has Image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        460,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/assets?action=registerUpload",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"registerUploadRequest\": {\n    \"recipes\": [\n      \"urn:li:digitalmediaRecipe:feedshare-image\"\n    ],\n    \"owner\": \"{{ $json.person_urn }}\",\n    \"serviceRelationships\": [\n      {\n        \"relationshipType\": \"OWNER\",\n        \"identifier\": \"urn:li:userGeneratedContent\"\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "register-upload-user2",
+      "name": "Register LinkedIn Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        240
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "REPLACE_WITH_USER2_LINKEDIN_CRED_ID",
+          "name": "LinkedIn account (User 2)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst originalItem = $('Has Image?').first().json;\nconst mechanism = item.value.uploadMechanism[\n  'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'\n];\nreturn {\n  json: {\n    ...originalItem,\n    upload_url: mechanism.uploadUrl,\n    asset_urn: item.value.asset\n  }\n};"
+      },
+      "id": "extract-upload-details-user2",
+      "name": "Extract Upload Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.image_url }}",
+        "responseFormat": "file",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "fetch-image-binary-user2",
+      "name": "Fetch Image Binary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.upload_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "upload-image-user2",
+      "name": "Upload Image to LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        240
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "REPLACE_WITH_USER2_LINKEDIN_CRED_ID",
+          "name": "LinkedIn account (User 2)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: $('Extract Upload Details').first().json };"
+      },
+      "id": "restore-post-data-user2",
+      "name": "Restore LinkedIn Post Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"author\": {{ JSON.stringify($json.person_urn) }},\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": {{ JSON.stringify($json.final_text) }}\n      },\n      \"shareMediaCategory\": \"IMAGE\",\n      \"media\": [\n        {\n          \"status\": \"READY\",\n          \"media\": {{ JSON.stringify($json.asset_urn) }}\n        }\n      ]\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
+        "options": {}
+      },
+      "id": "publish-with-image-user2",
+      "name": "Publish to LinkedIn (with image)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        240
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "REPLACE_WITH_USER2_LINKEDIN_CRED_ID",
+          "name": "LinkedIn account (User 2)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"author\": {{ JSON.stringify($json.person_urn) }},\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": {{ JSON.stringify($json.final_text) }}\n      },\n      \"shareMediaCategory\": \"NONE\"\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
+        "options": {}
+      },
+      "id": "publish-text-only-user2",
+      "name": "Publish to LinkedIn (text only)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        560
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "REPLACE_WITH_USER2_LINKEDIN_CRED_ID",
+          "name": "LinkedIn account (User 2)"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Has Image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Image?": {
+      "main": [
+        [
+          {
+            "node": "Register LinkedIn Upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish to LinkedIn (text only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register LinkedIn Upload": {
+      "main": [
+        [
+          {
+            "node": "Extract Upload Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Upload Details": {
+      "main": [
+        [
+          {
+            "node": "Fetch Image Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Image Binary": {
+      "main": [
+        [
+          {
+            "node": "Upload Image to LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Image to LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Restore LinkedIn Post Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore LinkedIn Post Data": {
+      "main": [
+        [
+          {
+            "node": "Publish to LinkedIn (with image)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "linkedin-pub-user2-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8104b931df9cff9d75c598c48a922ad3894b2002442349bf0b526e50abda9811"
+  },
+  "id": "linkedin-pub-user2",
+  "tags": []
+}
