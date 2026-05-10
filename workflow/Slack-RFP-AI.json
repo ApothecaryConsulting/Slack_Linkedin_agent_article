@@ -1,0 +1,674 @@
+{
+  "name": "Slack RFP Bot v9",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack/rfp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a6653c9c-482b-45e9-80b9-1b7537dc3e45",
+      "name": "Slack Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        1168,
+        1344
+      ],
+      "webhookId": "rfp-slack-webhook-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\n// Slack URL verification\nif (body.type === 'url_verification') {\n  return [{ json: { _type: 'challenge', challenge: body.challenge } }];\n}\n\n// /rfp slash command — just a flag, no action needed\nif (body.command === '/rfp') {\n  return [{\n    json: {\n      _type: 'slash',\n      user: body.user_id || '',\n      channel: body.channel_id || '',\n      response_url: body.response_url || ''\n    }\n  }];\n}\n\n// file_shared event — this is where the work happens\nif (body.type === 'event_callback') {\n  const ev = body.event || {};\n  if (ev.type === 'file_shared') {\n    return [{\n      json: {\n        _type: 'file_shared',\n        file_id: ev.file_id || (ev.file && ev.file.id) || null,\n        user: ev.user_id || ev.user || null,\n        channel: ev.channel_id || ev.channel || null\n      }\n    }];\n  }\n}\n\nreturn [{ json: { _type: 'unknown' } }];"
+      },
+      "id": "c4c9f018-7e05-4f9c-b016-0ff2b5eb2f5a",
+      "name": "Parse Slack Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json._type === 'challenge' ? JSON.stringify({ challenge: $json.challenge }) : JSON.stringify({ ok: true }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "0c338e5e-861e-423e-bd83-267f1588447f",
+      "name": "Respond to Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1616,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "is-file-shared",
+              "leftValue": "={{ $json._type }}",
+              "rightValue": "file_shared",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "25f8f3a0-f430-4d16-aae0-eb5005e6d87c",
+      "name": "Is File Shared?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        1504
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://slack.com/api/files.info?file={{ $json.file_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "baf4c215-5a89-4406-84cc-65017250e42d",
+      "name": "Get File Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "is-pdf",
+              "leftValue": "={{ $json.file.mimetype }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "88e476a1-5441-4c60-8dce-5a799a1c89b6",
+      "name": "Is PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.file.url_private }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "46959c7f-c486-4c87-9ec9-a019cc3018b1",
+      "name": "Download PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2320,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "={{ $('Parse Slack Event').first().json.user }}",
+          "mode": "id"
+        },
+        "text": "=⚠️ That file doesn't appear to be a PDF. Please upload a PDF version of your RFP.",
+        "otherOptions": {}
+      },
+      "id": "a5311fee-2d9a-4ede-940f-d28b30d4d3b5",
+      "name": "Not PDF Reply",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2048,
+        1344
+      ],
+      "webhookId": "3c873c09-f034-43f1-bab8-570ae28073be",
+      "credentials": {
+        "slackApi": {
+          "id": "rQYhUJOkTFNktYg8",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "c2191cd9-2fed-47d5-ac26-c57697a3231e",
+      "name": "Extract Document Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fileInfo = $('Get File Info').first().json.file;\nconst slashData = $('Parse Slack Event').first().json;\nconst rfpText = $('Extract Document Text').first().json.text || '';\nconst capText = $('Extract Capability Statement Text').first().json.text || '';\n\nreturn [{\n  json: {\n    file_name: fileInfo.name,\n    file_id: fileInfo.id,\n    uploader_user: slashData.user || fileInfo.user,\n    extracted_text: rfpText,\n    capability_statement: capText\n  }\n}];"
+      },
+      "id": "4a75faa4-9696-40fc-8188-4d00a7058ee8",
+      "name": "Prepare PDF for OpenAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3312,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4.1-mini\",\n  \"max_tokens\": 2000,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert at analyzing RFPs and matching them against company capability statements. When given an RFP and a capability statement, provide:\\n\\n**RFP Summary**\\n1. *Project Overview* — What is being requested\\n2. *Key Requirements* — The most important requirements\\n3. *Deadlines* — Submission deadline and key dates\\n4. *Scope of Work* — What work needs to be performed\\n5. *Evaluation Criteria* — How proposals will be scored\\n\\n**Capability Match Analysis**\\n6. *Strengths* — Where our capability statement strongly aligns with the RFP\\n7. *Gaps* — Where we may fall short or lack evidence\\n8. *Missing Certifications or Insurance* — List any certifications, clearances, licenses, or insurance requirements in the RFP that are not present in our capability statement. If none are missing, say None.\\n\\n**Pursuit Score**\\n9. *Score* — Give a score out of 100. Breakdown: capability alignment (40pts), past performance relevance (20pts), likelihood of winning (20pts), deduct up to 20pts for gaps and missing requirements. Show the breakdown.\\n10. *Recommendation* — Yes / No / Maybe and one sentence reason.\\n\\nKeep the summary practical and actionable. Use bullet points where helpful.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify('RFP Document: ' + $json.file_name + '\\n\\n' + $json.extracted_text + '\\n\\n---\\n\\nOur Capability Statement:\\n\\n' + $json.capability_statement) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "d5c60747-e694-4409-8312-f2566b9606aa",
+      "name": "OpenAI: Summarize RFP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3520,
+        1344
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "eaCC4e5jH2cVYm8b",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst inputData = $('Prepare PDF for OpenAI').first().json;\n\nconst summary = response.choices?.[0]?.message?.content || 'No summary returned from OpenAI.';\n\nreturn [{\n  json: {\n    summary,\n    file_name: inputData.file_name,\n    uploader_user: inputData.uploader_user\n  }\n}];"
+      },
+      "id": "1d1990d1-8a5f-4508-a3b2-9b46c418676f",
+      "name": "Extract Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3712,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "={{ $json.uploader_user }}",
+          "mode": "id"
+        },
+        "text": "=📄 *RFP Summary: {{ $json.file_name }}*\n\n{{ $json.summary }}",
+        "otherOptions": {}
+      },
+      "id": "2bf9387f-16f1-4129-ba37-b0c39c604eb9",
+      "name": "Post Summary to User",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3904,
+        1344
+      ],
+      "webhookId": "2b114043-0657-4482-9b32-226711197450",
+      "credentials": {
+        "slackApi": {
+          "id": "rQYhUJOkTFNktYg8",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "={{ $('Parse Slack Event').first().json.user }}",
+          "mode": "id"
+        },
+        "text": "=📥 *RFP received!* Downloading your file...",
+        "otherOptions": {}
+      },
+      "id": "8cd98541-e667-4f44-af44-37bc82b8d687",
+      "name": "Status: File Received",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1616,
+        1344
+      ],
+      "webhookId": "status-file-shared-wh",
+      "credentials": {
+        "slackApi": {
+          "id": "rQYhUJOkTFNktYg8",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/capability_statements/capability_statement.pdf",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "1f61390c-152b-411a-8a64-279d1883332f",
+      "name": "Read Capability Statement",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2816,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "5398c57f-1406-4032-9c89-2d6141f06e47",
+      "name": "Extract Capability Statement Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        3072,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "={{ $('Parse Slack Event').first().json.user }}",
+          "mode": "id"
+        },
+        "text": "=📝 *Capability Statement text extracted!* ",
+        "otherOptions": {}
+      },
+      "id": "5bbea2c7-1f72-45b7-bb01-5780adc1c23b",
+      "name": "Status: Capability Extracted",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3072,
+        1168
+      ],
+      "webhookId": "status-extract-text-wh",
+      "credentials": {
+        "slackApi": {
+          "id": "rQYhUJOkTFNktYg8",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "={{ $('Parse Slack Event').first().json.user }}",
+          "mode": "id"
+        },
+        "text": "=📝 *RFP text extracted!*",
+        "otherOptions": {}
+      },
+      "id": "6ed54523-a65c-4a5a-98c1-e9e772dc6ffa",
+      "name": "Status: RFP Extracted",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2560,
+        1168
+      ],
+      "webhookId": "status-extract-text-wh",
+      "credentials": {
+        "slackApi": {
+          "id": "rQYhUJOkTFNktYg8",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "={{ $('Parse Slack Event').first().json.user }}",
+          "mode": "id"
+        },
+        "text": "=⬇️ *Capability Statement downloaded!* Extracting text from your document...",
+        "otherOptions": {}
+      },
+      "id": "b96b8e3d-2c6a-4fb3-b742-784c1d39ec6a",
+      "name": "Status: Capability Statement Downloaded",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2816,
+        1168
+      ],
+      "webhookId": "status-download-pdf-wh",
+      "credentials": {
+        "slackApi": {
+          "id": "rQYhUJOkTFNktYg8",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "={{ $('Parse Slack Event').first().json.user }}",
+          "mode": "id"
+        },
+        "text": "=⬇️ *RFP downloaded!* Extracting text from your document...",
+        "otherOptions": {}
+      },
+      "id": "88860108-4414-4f71-8340-0a9771484601",
+      "name": "Status: RFP Downloaded",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2320,
+        1168
+      ],
+      "webhookId": "status-download-pdf-wh",
+      "credentials": {
+        "slackApi": {
+          "id": "rQYhUJOkTFNktYg8",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "={{ $('Parse Slack Event').first().json.user }}",
+          "mode": "id"
+        },
+        "text": "=📝 *Sending Capability Statement and RFP for AI analysis! Please wait...* ",
+        "otherOptions": {}
+      },
+      "id": "ad462364-bc1b-4d13-94f4-3fbc5309912e",
+      "name": "Status: RFP and Capability Statement formatting",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3312,
+        1168
+      ],
+      "webhookId": "status-extract-text-wh",
+      "credentials": {
+        "slackApi": {
+          "id": "rQYhUJOkTFNktYg8",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Slack Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Slack Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Slack Event": {
+      "main": [
+        [
+          {
+            "node": "Respond to Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is File Shared?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is File Shared?": {
+      "main": [
+        [
+          {
+            "node": "Status: File Received",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get File Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File Info": {
+      "main": [
+        [
+          {
+            "node": "Is PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is PDF?": {
+      "main": [
+        [
+          {
+            "node": "Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not PDF Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download PDF": {
+      "main": [
+        [
+          {
+            "node": "Status: RFP Downloaded",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Document Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Document Text": {
+      "main": [
+        [
+          {
+            "node": "Status: RFP Extracted",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Capability Statement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare PDF for OpenAI": {
+      "main": [
+        [
+          {
+            "node": "OpenAI: Summarize RFP",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Status: RFP and Capability Statement formatting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI: Summarize RFP": {
+      "main": [
+        [
+          {
+            "node": "Extract Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Summary": {
+      "main": [
+        [
+          {
+            "node": "Post Summary to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Capability Statement": {
+      "main": [
+        [
+          {
+            "node": "Extract Capability Statement Text",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Status: Capability Statement Downloaded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Capability Statement Text": {
+      "main": [
+        [
+          {
+            "node": "Status: Capability Extracted",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare PDF for OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "16747106-b496-4b31-a574-4fe87a3441fd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9885b826ef31ffee3f6641c09d914600d6083c1c98fa7f780571e3a79b39dcc5"
+  },
+  "id": "B9RAf5FzXElxBWHE",
+  "tags": []
+}
