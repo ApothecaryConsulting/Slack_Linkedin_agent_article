@@ -1,0 +1,17 @@
+FROM n8nio/n8n:latest
+
+USER root
+
+ARG TARGETARCH=amd64
+
+RUN wget -q "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-${TARGETARCH}.tgz" \
+        -O /tmp/ngrok.tgz \
+    && tar -xzf /tmp/ngrok.tgz -C /usr/local/bin \
+    && rm /tmp/ngrok.tgz
+
+RUN printf '#!/bin/sh\nset -e\n\nif [ -n "$NGROK_AUTHTOKEN" ]; then\n    if [ -n "$NGROK_DOMAIN" ]; then\n        ngrok http --domain="$NGROK_DOMAIN" "${N8N_PORT:-5678}" &\n    else\n        ngrok http "${N8N_PORT:-5678}" &\n    fi\nfi\n\nexec n8n\n' > /docker-entrypoint.sh \
+    && chmod +x /docker-entrypoint.sh
+
+USER node
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
